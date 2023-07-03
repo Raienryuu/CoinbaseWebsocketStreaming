@@ -1,5 +1,6 @@
 
 using Microsoft.EntityFrameworkCore;
+using StreamingWithBackpressure.Connections;
 using StreamingWithBackpressure.ResponseModels;
 
 namespace StreamingWithBackpressure
@@ -11,14 +12,14 @@ namespace StreamingWithBackpressure
             var builder = WebApplication.CreateBuilder(args);
             var connectionString = builder.Configuration["Storage"];
 
-            builder.Services.AddDbContext<DatabaseContext>(options =>
-            options.UseSqlServer(connectionString));
+            //builder.Services.AddDbContext<DatabaseContext>(options =>
+            //options.UseSqlServer(connectionString));
 
-            var contextOptions = new DbContextOptionsBuilder<DatabaseContext>()
-                .UseSqlServer(connectionString)
-                .Options;
+            //var contextOptions = new DbContextOptionsBuilder<DatabaseContext>()
+            //    .UseSqlServer(connectionString)
+            //    .Options;
 
-            using var context = new DatabaseContext(contextOptions);
+            //using var context = new DatabaseContext(contextOptions);
 
             //// Add services to the container.
 
@@ -45,13 +46,16 @@ namespace StreamingWithBackpressure
             //app.MapFallbackToFile("index.html");
 
 
-            StatusConnection statusConnection = new(context);
-            statusConnection.StartStatusRequest();
+            StatusConnection statusConnection = new();
+            //Task task1 = Task.Factory.StartNew(statusConnection.TryGetDataFromWebSocketAsync);
+            Level2Connection level2Connection = new();
+            Task task2 = Task.Factory.StartNew(level2Connection.TryGetDataFromWebSocketAsync);
             Console.ReadKey();
 
             //app.Run();
 
 
         }
+
     }
 }
