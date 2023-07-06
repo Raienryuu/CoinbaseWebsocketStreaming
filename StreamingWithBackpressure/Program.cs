@@ -1,60 +1,57 @@
-
-using Microsoft.EntityFrameworkCore;
+using StreamingWithBackpressure.BackpressureSimulation;
 using StreamingWithBackpressure.Connections;
-using StreamingWithBackpressure.ResponseModels;
+using StreamingWithBackpressure.Connections.DataModels;
 
 namespace StreamingWithBackpressure
 {
     public class Program
     {
-        public static void Main(string[] args)
+        private enum BackpressureResolvingMethod
         {
-            var builder = WebApplication.CreateBuilder(args);
-            var connectionString = builder.Configuration["Storage"];
+            BUFFER = 0,
+            SKIP = 1,
+            CONTROL_SENDER = 2
+        }
+        public static async Task Main(string[] args)
+        {
+            ConnectionFactory connectionBuilder = new();
 
-            //builder.Services.AddDbContext<DatabaseContext>(options =>
-            //options.UseSqlServer(connectionString));
+            FastFakeIngester fastFakeIngester = new();
+            MediumFakeIngester mediumFakeIngester = new();
+            SlowFakeIngester slowFakeIngester = new();
 
-            //var contextOptions = new DbContextOptionsBuilder<DatabaseContext>()
-            //    .UseSqlServer(connectionString)
-            //    .Options;
+            Connection<Level2Model> statusConnection = connectionBuilder.GetLevel2Connection();
+            await statusConnection.TryStartConnectionAsync();
 
-            //using var context = new DatabaseContext(contextOptions);
+            BackpressureResolvingMethod method;
+            method = BackpressureResolvingMethod.BUFFER;
 
-            //// Add services to the container.
-
-            //builder.Services.AddControllersWithViews();
-
-            //var app = builder.Build();
-
-            //// Configure the HTTP request pipeline.
-            //if (!app.Environment.IsDevelopment())
+            //switch (method)
             //{
-            //    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
-            //    app.UseHsts();
+            //    case BackpressureResolvingMethod.BUFFER:
+            //        while (true)
+            //        {
+            //            await statusConnection.GetDataFromWebSocketAsync();
+            //            await slowFakeIngester.IngestData();
+            //        }
+            //    case BackpressureResolvingMethod.SKIP:
+            //        while (true) { 
+            //            await statusConnection.GetDataFromWebSocketAsync();
+            //            await mediumFakeIngester.IngestData();
+            //        }
+            //    case BackpressureResolvingMethod.CONTROL_SENDER:
+            //        while (true)
+            //        {
+            //            await statusConnection.GetDataFromWebSocketAsync();
+            //            await mediumFakeIngester.IngestData();
+            //        }
+            //    default:
+            //        throw new Exception("Unindentified resolving method.");
+
             //}
 
-            //app.UseHttpsRedirection();
-            //app.UseStaticFiles();
-            //app.UseRouting();
 
-            //app.UseCors();
-            //app.MapControllerRoute(
-            //    name: "default",
-            //    pattern: "{controller}/{action=Index}/{id?}");
-
-            //app.MapFallbackToFile("index.html");
-
-
-            StatusConnection statusConnection = new();
-            //Task task1 = Task.Factory.StartNew(statusConnection.TryGetDataFromWebSocketAsync);
-            Level2Connection level2Connection = new();
-            Task task2 = Task.Factory.StartNew(level2Connection.TryGetDataFromWebSocketAsync);
             Console.ReadKey();
-
-            //app.Run();
-
-
         }
 
     }

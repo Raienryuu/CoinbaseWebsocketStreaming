@@ -1,9 +1,15 @@
-﻿using System.Net.WebSockets;
+﻿using Newtonsoft.Json;
+using System.Diagnostics;
+using System.Linq.Expressions;
+using System.Net.WebSockets;
 using System.Text;
 
 namespace StreamingWithBackpressure.Connections
 {
-    public class Connection
+    /// <summary>
+    /// Instantiate only through <see cref="ConnectionFactory"/>.
+    /// </summary>
+    public class Connection<T>
     {
         public string requestJson;
         public ClientWebSocket streamSocket;
@@ -15,10 +21,8 @@ namespace StreamingWithBackpressure.Connections
         {
             requestJson = "";
             coinbaseFeed = new Uri("wss://ws-feed-public.sandbox.exchange.coinbase.com");
+            coinbaseFeed = new Uri("ws://localhost:8080");
             streamSocket = new ClientWebSocket();
-
-            byte[] buffer = new byte[10000];
-            segment = new(buffer);
             byte[] jsonBytes = Encoding.UTF8.GetBytes(requestJson);
             dataJson = new ArraySegment<byte>(jsonBytes);
         }
@@ -30,11 +34,12 @@ namespace StreamingWithBackpressure.Connections
             {
                 await streamSocket.ConnectAsync(coinbaseFeed, CancellationToken.None);
             }
-            catch (Exception e)
+            catch (WebSocketException e)
             {
                 Console.WriteLine(e.Message);
-                return;
             }
+
+            Debug.Assert(segment.Array is not null);
 
             await SendRequest();
 
@@ -52,32 +57,85 @@ namespace StreamingWithBackpressure.Connections
             {
                 Console.WriteLine("Connection has been restored.");
             }
-            else if (streamSocket.State == WebSocketState.Aborted)
+            else if (streamSocket.State == WebSocketState.Aborted || streamSocket.State == WebSocketState.None)
             {
                 Console.WriteLine("Unable to restore WebSocket connection.");
             }
             else
             {
+                Console.WriteLine(streamSocket.State.ToString());
                 throw new WebSocketException();
             }
-
+        }
+        public void SetBufferSize(int bytes)
+        {
+            byte[] buffer = new byte[bytes];
+            this.segment = new(buffer);
         }
 
-        async public Task ReceiveRequestConfirmation()
+        async private Task ReceiveRequestConfirmation()
         {
+            try { 
             await streamSocket.ReceiveAsync(segment,
                 CancellationToken.None);
-
+            }
+            catch (WebSocketException)
+            {
+                TryReconnecting();
+            }
             Console.WriteLine(Encoding.UTF8.GetString(segment));
             Console.WriteLine("--------");
         }
 
-        async public Task SendRequest()
+        async private Task SendRequest()
         {
+            dataJson = Encoding.UTF8.GetBytes(requestJson);
             await streamSocket.SendAsync(dataJson, WebSocketMessageType.Text,
                 true, CancellationToken.None);
         }
 
+        public async Task<T> GetDataFromWebSocketAsync()
+        {
+            if (streamSocket.State != WebSocketState.Open)
+            {
+                return default!;
+            }
+            WebSocketReceiveResult res;
+            string responseJson;
+            T model;
+
+            try
+            {
+                res = await this.streamSocket.ReceiveAsync(segment,
+                CancellationToken.None);
+                Debug.Assert(segment.Array is not null);
+                Debug.Assert(res.Count > 0);
+
+                byte[] receivedData = segment.Array.Take(res.Count)
+                                                    .ToArray();
+                responseJson = Encoding.UTF8.GetString(receivedData);
+                Console.WriteLine(responseJson);
+                if (responseJson is null)
+                {
+                    throw new InvalidDataException();
+                }
+
+                model = JsonConvert.DeserializeObject<T>(responseJson)!;
+                Debug.Assert(model is not null);
+                return model;
+                
+            }
+            catch (WebSocketException)
+            {
+                TryReconnecting();
+            }
+            return default!;
+        }
+        public void ClearBuffer()
+        {
+            byte[] buffer = new byte[10000];
+            segment = new(buffer);
+        }
     }
     
 }
