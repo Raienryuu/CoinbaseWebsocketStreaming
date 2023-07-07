@@ -7,9 +7,9 @@ using System.Text;
 namespace StreamingWithBackpressure.Connections
 {
     /// <summary>
-    /// Instantiate only through <see cref="ConnectionFactory"/>.
+    /// Instantiate only through <see cref="WebSocketConnectionFactory"/>.
     /// </summary>
-    public class Connection<T>
+    public class WebSocketConnection<T>
     {
         public string requestJson;
         public ClientWebSocket streamSocket;
@@ -17,11 +17,11 @@ namespace StreamingWithBackpressure.Connections
         public ArraySegment<byte> segment;
         public ArraySegment<byte> dataJson;
 
-        public Connection()
+        public WebSocketConnection()
         {
             requestJson = "";
             coinbaseFeed = new Uri("wss://ws-feed-public.sandbox.exchange.coinbase.com");
-            coinbaseFeed = new Uri("ws://localhost:8080");
+            coinbaseFeed = new Uri("ws://127.0.0.1:8080/");
             streamSocket = new ClientWebSocket();
             byte[] jsonBytes = Encoding.UTF8.GetBytes(requestJson);
             dataJson = new ArraySegment<byte>(jsonBytes);
@@ -70,7 +70,7 @@ namespace StreamingWithBackpressure.Connections
         public void SetBufferSize(int bytes)
         {
             byte[] buffer = new byte[bytes];
-            this.segment = new(buffer);
+            segment = new(buffer);
         }
 
         async private Task ReceiveRequestConfirmation()

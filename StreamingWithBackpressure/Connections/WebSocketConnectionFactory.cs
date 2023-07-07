@@ -3,13 +3,13 @@
 namespace StreamingWithBackpressure.Connections
 {
     /// <summary>
-    /// Allows creating predefined instances of <see cref="Connection{T}"/>.
+    /// Allows creating predefined instances of <see cref="WebSocketConnection{T}"/>.
     /// </summary>
-    public class ConnectionFactory
+    public class WebSocketConnectionFactory
     {
-        public Connection<Level2Model> GetLevel2Connection()
+        public WebSocketConnection<Level2Model> GetLevel2Connection()
         {
-            Connection<Level2Model> connection = new();
+            WebSocketConnection<Level2Model> connection = new();
 
             string requestJson = @"
             {
@@ -24,9 +24,9 @@ namespace StreamingWithBackpressure.Connections
             return connection;
         }
 
-        public Connection<StatusModel> GetStatusConnection()
+        public WebSocketConnection<StatusModel> GetStatusConnection()
         {
-            Connection<StatusModel> connection = new();
+            WebSocketConnection<StatusModel> connection = new();
 
             string requestJson = @"
             {

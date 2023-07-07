@@ -1,6 +1,10 @@
 using StreamingWithBackpressure.BackpressureSimulation;
 using StreamingWithBackpressure.Connections;
 using StreamingWithBackpressure.Connections.DataModels;
+using System.Net.Security;
+using System.Net.Sockets;
+using System.Net.WebSockets;
+using System.Text;
 
 namespace StreamingWithBackpressure
 {
@@ -14,17 +18,17 @@ namespace StreamingWithBackpressure
         }
         public static async Task Main(string[] args)
         {
-            ConnectionFactory connectionBuilder = new();
+            WebSocketConnectionFactory connectionBuilder = new();
 
             FastFakeIngester fastFakeIngester = new();
             MediumFakeIngester mediumFakeIngester = new();
             SlowFakeIngester slowFakeIngester = new();
 
-            Connection<Level2Model> statusConnection = connectionBuilder.GetLevel2Connection();
-            await statusConnection.TryStartConnectionAsync();
+            WebSocketConnection<Level2Model> statusConnection = connectionBuilder.GetLevel2Connection();
+            //await statusConnection.TryStartConnectionAsync();
 
-            BackpressureResolvingMethod method;
-            method = BackpressureResolvingMethod.BUFFER;
+            //BackpressureResolvingMethod method;
+            //method = BackpressureResolvingMethod.BUFFER;
 
             //switch (method)
             //{
@@ -50,7 +54,12 @@ namespace StreamingWithBackpressure
 
             //}
 
+            //statusConnection.TryStartConnectionAsync();
 
+            SocketConnection socketConnection = new();
+            await socketConnection.StartConnectionSslStream();
+            
+            
             Console.ReadKey();
         }
 
