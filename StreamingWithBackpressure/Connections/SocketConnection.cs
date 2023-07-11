@@ -15,7 +15,7 @@ namespace StreamingWithBackpressure.Connections
 
         public SocketConnection()
         {
-            //serverHost = "127.0.0.1"; serverPort = 8080;
+            serverHost = "127.0.0.1"; serverPort = 8080;
 
             socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             socket.Connect(serverHost, serverPort);
@@ -28,22 +28,35 @@ namespace StreamingWithBackpressure.Connections
             sslStream.AuthenticateAsClient(serverHost);
             Debug.Assert(sslStream.IsAuthenticated);
 
-            string message = $"GET / HTTP/1.1\r\n" +
-                 $"Host: {serverHost}\r\n" +
-                 $"Upgrade: websocket\r\n" +
-                 $"Connection: Upgrade\r\n" +
-                 $"Sec-WebSocket-Key: AQIDBAUGBwgJCgsMDQ4PEC==\r\n" +
-                 $"Sec-WebSocket-Version: 13\r\n\r\n";
-            await SendThroughSslStream(message);
-            await ReceiveThroughSslStream();
 
-            message = @"
+            await UpgradeToSocketSslStream();
+
+            string message = @"
             {
               ""type"": ""subscribe"",
               ""channels"": [{ ""name"": ""status""}]
             }";
             await SendThroughSslStream(message);
             await ReceiveThroughSslStream();
+        }
+
+        private async Task UpgradeToSocketSslStream()
+        {
+            string message = $"GET / HTTP/1.1\r\n" +
+                 $"Host: {serverHost}\r\n" +
+                 $"Upgrade: websocket\r\n" +
+                 $"Connection: Upgrade\r\n" +
+                 $"Sec-WebSocket-Key: AQIDBAUGBwgJCgsMDQ4PEC==\r\n" +
+                 $"Sec-WebSocket-Version: 13\r\n\r\n";
+
+            byte[] messageBytes = Encoding.UTF8.GetBytes(message);
+            sslStream.Write(messageBytes);
+            await sslStream.FlushAsync();
+            byte[] buffer = new byte[4000];
+            int bytesRead = await sslStream.ReadAsync(buffer, CancellationToken.None);
+            string receivedMessage = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+            Console.WriteLine("Received ssl: " + receivedMessage);
+            return;
         }
 
         public async Task StartConnectionSocket()
@@ -69,6 +82,7 @@ namespace StreamingWithBackpressure.Connections
         private async Task SendThroughSslStream(string message)
         {
             byte[] messageBytes = Encoding.UTF8.GetBytes(message);
+            messageBytes = MaskMessage(messageBytes);
             sslStream.Write(messageBytes);
             await sslStream.FlushAsync();
         }
@@ -76,7 +90,7 @@ namespace StreamingWithBackpressure.Connections
         private async Task<string> ReceiveThroughSslStream()
         {
             byte[] buffer = new byte[4000];
-            int bytesRead = await sslStream.ReadAsync(buffer.AsMemory(0, 4000), CancellationToken.None);
+            int bytesRead = await sslStream.ReadAsync(buffer, CancellationToken.None);
             string receivedMessage = Encoding.UTF8.GetString(buffer, 0, bytesRead);
             Console.WriteLine("Received ssl: " + receivedMessage);
             return receivedMessage;
@@ -86,7 +100,7 @@ namespace StreamingWithBackpressure.Connections
         {
             if(socket.Connected)
             {
-                ArraySegment<byte> messageSegment = Encoding.UTF8
+                byte[] messageSegment = Encoding.UTF8
                                 .GetBytes(message);
                 await socket.SendAsync(messageSegment);
             }
@@ -100,6 +114,21 @@ namespace StreamingWithBackpressure.Connections
             var responseMessage = Encoding.UTF8.GetString(responseBytes);
             Console.WriteLine("Received sock: " + responseMessage);
             return responseMessage;
+        }
+
+        private byte[] MaskMessage(byte[] message)
+        {
+            Random random = new Random();
+            byte[] mask = new byte[4];
+            random.NextBytes(mask);
+            byte[] maskedMessage = new byte[message.Length + 6];
+            maskedMessage[1] |= 0x80;
+            Array.Copy(mask, 0, maskedMessage, 2, 4);
+            for (int i = 0; i < message.Length; i++)
+            {
+                maskedMessage[i + 6] = (byte)(message[i] ^ mask[i % 4]);
+            }
+            return maskedMessage;
         }
 
     }

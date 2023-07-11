@@ -4,6 +4,7 @@ using StreamingWithBackpressure.Connections.DataModels;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Numerics;
 using System.Text;
 
 namespace StreamingWithBackpressure
@@ -57,9 +58,9 @@ namespace StreamingWithBackpressure
             //statusConnection.TryStartConnectionAsync();
 
             SocketConnection socketConnection = new();
-            await socketConnection.StartConnectionSslStream();
-            
-            
+            await socketConnection.StartConnectionSocket();
+            SocketPayload payload = new();
+
             Console.ReadKey();
         }
 
