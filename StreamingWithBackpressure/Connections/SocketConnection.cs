@@ -1,4 +1,5 @@
-﻿using System;
+﻿using StreamingWithBackpressure.Connections.DataModels;
+using System;
 using System.Diagnostics;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -52,14 +53,10 @@ namespace StreamingWithBackpressure.Connections
             byte[] messageBytes = Encoding.UTF8.GetBytes(message);
             sslStream.Write(messageBytes);
             await sslStream.FlushAsync();
-            byte[] buffer = new byte[4000];
-            int bytesRead = await sslStream.ReadAsync(buffer, CancellationToken.None);
-            string receivedMessage = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-            Console.WriteLine("Received ssl: " + receivedMessage);
-            return;
+            await ReceiveThroughSslStream();
         }
 
-        public async Task StartConnectionSocket()
+        private async Task UpgradeToSocket()
         {
             string message = $"GET / HTTP/1.1\r\n" +
                  $"Host: {serverHost}\r\n" +
@@ -67,10 +64,18 @@ namespace StreamingWithBackpressure.Connections
                  $"Connection: Upgrade\r\n" +
                  $"Sec-WebSocket-Key: AQIDBAUGBwgJCgsMDQ4PEC==\r\n" +
                  $"Sec-WebSocket-Version: 13\r\n\r\n";
-            await SendThroughSocket(message);
-            await ReceiveThroughSocket();
 
-            message = @"
+            byte[] messageBytes = Encoding.UTF8.GetBytes(message);
+            await socket.SendAsync(messageBytes);
+            await ReceiveThroughSocket(); 
+        }
+
+        public async Task StartConnectionSocket()
+        {
+
+            await UpgradeToSocket();
+
+            var message = @"
             {
               ""type"": ""subscribe"",
               ""channels"": [{ ""name"": ""status""}]
@@ -81,8 +86,11 @@ namespace StreamingWithBackpressure.Connections
 
         private async Task SendThroughSslStream(string message)
         {
-            byte[] messageBytes = Encoding.UTF8.GetBytes(message);
-            messageBytes = MaskMessage(messageBytes);
+            SocketPayload payload = new SocketPayload();
+            payload.SetFinBit(true);
+            payload.SetOpcode((byte)Opcode.BinaryFrame);
+            payload.SetApplicationData(message);
+            byte[] messageBytes = payload.GetMessageBytes();
             sslStream.Write(messageBytes);
             await sslStream.FlushAsync();
         }
@@ -100,11 +108,14 @@ namespace StreamingWithBackpressure.Connections
         {
             if(socket.Connected)
             {
-                byte[] messageSegment = Encoding.UTF8
-                                .GetBytes(message);
-                await socket.SendAsync(messageSegment);
+                SocketPayload payload = new SocketPayload();
+                payload.SetFinBit(true);
+                payload.SetOpcode((byte)Opcode.BinaryFrame);
+                payload.SetApplicationData(message);
+                byte[] messageBytes = payload.GetMessageBytes();
+
+                await socket.SendAsync(messageBytes);
             }
-            
         }
 
         private async Task<string> ReceiveThroughSocket()
@@ -115,21 +126,5 @@ namespace StreamingWithBackpressure.Connections
             Console.WriteLine("Received sock: " + responseMessage);
             return responseMessage;
         }
-
-        private byte[] MaskMessage(byte[] message)
-        {
-            Random random = new Random();
-            byte[] mask = new byte[4];
-            random.NextBytes(mask);
-            byte[] maskedMessage = new byte[message.Length + 6];
-            maskedMessage[1] |= 0x80;
-            Array.Copy(mask, 0, maskedMessage, 2, 4);
-            for (int i = 0; i < message.Length; i++)
-            {
-                maskedMessage[i + 6] = (byte)(message[i] ^ mask[i % 4]);
-            }
-            return maskedMessage;
-        }
-
     }
 }

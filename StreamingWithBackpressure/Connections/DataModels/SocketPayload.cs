@@ -13,9 +13,11 @@ namespace StreamingWithBackpressure.Connections.DataModels
         ContinuationFrame = 0x0,
         TextFrame = 0x1,
         BinaryFrame = 0x2,
+        // 0x3-0x7 are reserved for further non-control frames
         ConnectionClose = 0x8,
         Ping = 0x9,
         Pong = 0xA,
+        // 0xB-0xF are reserved for further control frames
     }
     public class SocketPayload
     {
@@ -69,7 +71,17 @@ namespace StreamingWithBackpressure.Connections.DataModels
             if(message.Length > 0)
             {
                 ApplicationBytes = Encoding.UTF8.GetBytes(message);
-                PayloadLength = (ulong)ExtensionBytes.Length + (ulong)ApplicationBytes.Length;
+                PayloadLength = (ulong)ExtensionBytes.LongLength
+                    + (ulong)ApplicationBytes.LongLength;
+            }
+        }
+        public void SetExtensionData(string message)
+        {
+            if(message.Length > 0)
+            {
+                ExtensionBytes = Encoding.UTF8.GetBytes(message);
+                PayloadLength = (ulong)ExtensionBytes.LongLength 
+                    + (ulong)ApplicationBytes.LongLength;
             }
         }
 
@@ -89,15 +101,30 @@ namespace StreamingWithBackpressure.Connections.DataModels
                 Array.Copy(MaskBytes, 0, message, currentByteIndex, 4);
                 currentByteIndex += 4;
             }
+
+            message = ExtendMessageLength(message);
+
             if (ExtensionBytes.Length > 0)
             {
-                Array.Copy(ExtensionBytes, 0, message, currentByteIndex, ExtensionBytes.Length);
+                Array.Copy(ExtensionBytes, 0, message, currentByteIndex,
+                    ExtensionBytes.Length);
                 currentByteIndex += ExtensionBytes.Length;
             }
+
             if (ApplicationBytes.Length > 0)
             {
-                Array.Copy(ApplicationBytes, 0, message, currentByteIndex, ApplicationBytes.Length);
+                Array.Copy(ApplicationBytes, 0, message, currentByteIndex,
+                    ApplicationBytes.Length);
             }
+        }
+
+        private byte[] ExtendMessageLength(byte[] message)
+        {
+            byte[] extendedMessage = new byte[(ulong)message.Length
+                + PayloadLength];
+            Array.Copy(message, extendedMessage, message.Length);
+
+            return extendedMessage;
         }
 
         private void SetPayloadLengthPart(ref byte[] message)

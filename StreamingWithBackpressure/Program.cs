@@ -59,7 +59,6 @@ namespace StreamingWithBackpressure
 
             SocketConnection socketConnection = new();
             await socketConnection.StartConnectionSocket();
-            SocketPayload payload = new();
 
             Console.ReadKey();
         }
