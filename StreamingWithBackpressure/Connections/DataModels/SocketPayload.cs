@@ -1,8 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System.Collections;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace StreamingWithBackpressure.Connections.DataModels
 {
@@ -21,13 +18,13 @@ namespace StreamingWithBackpressure.Connections.DataModels
     }
     public class SocketPayload
     {
-        bool FinBit { get; set; } = false;
+        bool FinBit { get; set; } = true;
         private bool RSV1 { get; set; } = false;
         private bool RSV2 { get; set; } = false;
         private bool RSV3 { get; set; } = false;
-        public byte Opcode { get; private set; }
+        public Opcode Opcode { get; private set; }
         private bool Mask { get; set; } = true;
-        public UInt64 PayloadLength { get; private set; } = 0;
+        public ulong PayloadLength { get; private set; } = 0;
         private byte[] MaskBytes { get; set; }
         private byte[] ExtensionBytes { get; set; }
         private byte[] ApplicationBytes { get; set; }
@@ -38,14 +35,12 @@ namespace StreamingWithBackpressure.Connections.DataModels
 
         public SocketPayload() 
         {
-            Random random = new Random();
             MaskBytes = new byte[4];
-            random.NextBytes(MaskBytes);
-            ApplicationBytes = new byte[0];
-            ExtensionBytes = new byte[0];
-            Message = new byte[24];
+            new Random().NextBytes(MaskBytes);
+            ApplicationBytes = Array.Empty<byte>();
+            ExtensionBytes = Array.Empty<byte>();
+            Message = new byte[14];
         }
-
 
         public bool GetFinBit()
         {
@@ -55,33 +50,27 @@ namespace StreamingWithBackpressure.Connections.DataModels
         {
             FinBit = finBit;
         }
-        public void SetOpcode(byte Opcode)
+        public void SetOpcode(Opcode opcode)
         {
-            if (Opcode > 15)
-            {
-                return;
-            }
-            else if (Opcode < 16) {
-                this.Opcode = Opcode;
-            }
+            Opcode = opcode;
         }
 
-        public void SetApplicationData(string message)
+        public void SetApplicationData(string applicationData)
         {
-            if(message.Length > 0)
+            if(applicationData.Length > 0)
             {
-                ApplicationBytes = Encoding.UTF8.GetBytes(message);
-                PayloadLength = (ulong)ExtensionBytes.LongLength
-                    + (ulong)ApplicationBytes.LongLength;
+                ApplicationBytes = Encoding.UTF8.GetBytes(applicationData);
+                PayloadLength = (ulong)ExtensionBytes.Length
+                    + (ulong)ApplicationBytes.Length;
             }
         }
-        public void SetExtensionData(string message)
+        public void SetExtensionData(string extensionData)
         {
-            if(message.Length > 0)
+            if(extensionData.Length > 0)
             {
-                ExtensionBytes = Encoding.UTF8.GetBytes(message);
-                PayloadLength = (ulong)ExtensionBytes.LongLength 
-                    + (ulong)ApplicationBytes.LongLength;
+                ExtensionBytes = Encoding.UTF8.GetBytes(extensionData);
+                PayloadLength = (ulong)ExtensionBytes.Length 
+                    + (ulong)ApplicationBytes.Length;
             }
         }
 
@@ -98,33 +87,33 @@ namespace StreamingWithBackpressure.Connections.DataModels
         {
             if (Mask)
             {
-                Array.Copy(MaskBytes, 0, message, currentByteIndex, 4);
+                message[1] = (byte)(message[1] | 0x80);
+                MaskBytes.CopyTo(message, currentByteIndex);
                 currentByteIndex += 4;
             }
-
-            message = ExtendMessageLength(message);
-
-            if (ExtensionBytes.Length > 0)
-            {
-                Array.Copy(ExtensionBytes, 0, message, currentByteIndex,
-                    ExtensionBytes.Length);
-                currentByteIndex += ExtensionBytes.Length;
-            }
-
-            if (ApplicationBytes.Length > 0)
-            {
-                Array.Copy(ApplicationBytes, 0, message, currentByteIndex,
-                    ApplicationBytes.Length);
-            }
+            LoadPayloadData(ref message);
         }
 
-        private byte[] ExtendMessageLength(byte[] message)
+        private void LoadPayloadData(ref byte[] message)
         {
-            byte[] extendedMessage = new byte[(ulong)message.Length
-                + PayloadLength];
-            Array.Copy(message, extendedMessage, message.Length);
+            int i;
+            for (i = 0; i < ExtensionBytes.Length; i++)
+            {
+                message[i + currentByteIndex] = (byte)(ExtensionBytes[i] ^ MaskBytes[i % 4]);
+            }
+            currentByteIndex += i;
+            for (i = 0; i < ApplicationBytes.Length; i++)
+            {
+                message[i + currentByteIndex] = (byte)(ApplicationBytes[i] ^ MaskBytes[i % 4]);
+            }
+            currentByteIndex += i;
+        }
 
-            return extendedMessage;
+        private void ExtendMessageLength(ref byte[] message, ulong newLength)
+        {
+            byte[] extendedMessage = new byte[newLength];
+            Array.Copy(message, extendedMessage, message.Length);
+            message = extendedMessage;
         }
 
         private void SetPayloadLengthPart(ref byte[] message)
@@ -133,19 +122,29 @@ namespace StreamingWithBackpressure.Connections.DataModels
             {
                 message[1] += (byte)PayloadLength;
                 currentByteIndex = 2;
-            } else if ((byte)PayloadLength == 126)
+                ExtendMessageLength(ref message, PayloadLength + 6);
+            } else if (PayloadLength <= UInt16.MaxValue)
             {
-                message[3] = 0x7E;
+                message[1] = 0x7E;
+                byte[] lengthBytes = BitConverter.GetBytes(PayloadLength);
+                for (int i = 2; i < 4; i++)
+                {
+                    message[i] = lengthBytes[i - 2];
+                }
                 currentByteIndex = 4;
+                ExtendMessageLength(ref message, PayloadLength + 8);
             }
-            else if (PayloadLength < UInt64.MaxValue)
+            else if (PayloadLength <= UInt64.MaxValue)
             {
+                message[1] = 0x7F;
+
                 byte[] lengthBytes = BitConverter.GetBytes(PayloadLength);
                 for (int i = 2; i < 10; i++)
                 {
                     message[i] = lengthBytes[i - 2];
                 }
                 currentByteIndex = 10;
+                ExtendMessageLength(ref message, PayloadLength + 14);
             }
             else
             {
@@ -156,6 +155,7 @@ namespace StreamingWithBackpressure.Connections.DataModels
         private void SetFirstPart(ref byte[] message)
         {
             message[0] = 0;
+            message[0] |= (byte)Opcode;
             if (FinBit)
             {
                 message[0] = message[0] |= 0x80;
@@ -172,11 +172,11 @@ namespace StreamingWithBackpressure.Connections.DataModels
             {
                 message[0] = message[0] |= 0x10;
             }
-            message[0] |= Opcode;
-            if (Mask)
-            {
-                message[1] = message[1] |= 0x80;
-            }
+        }
+
+        public void SetMask(byte[] mask)
+        {
+            MaskBytes = mask;
         }
     }
 }

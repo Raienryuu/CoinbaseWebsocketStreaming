@@ -1,4 +1,5 @@
 ﻿using StreamingWithBackpressure.Connections.DataModels;
+using StreamingWithBackpressure.NewFolder;
 using System;
 using System.Diagnostics;
 using System.Net.Security;
@@ -11,16 +12,16 @@ namespace StreamingWithBackpressure.Connections
     {
         private Socket socket;
         private SslStream sslStream;
-        private string serverHost = "ws-feed-public.sandbox.exchange.coinbase.com";
-        private int serverPort = 443;
+        private string serverHost;
+        private int serverPort;
 
-        public SocketConnection()
+        public SocketConnection(string serverHost, int serverPort)
         {
-            serverHost = "127.0.0.1"; serverPort = 8080;
-
+            this.serverHost = serverHost;
+            this.serverPort = serverPort;
+            //serverHost = "127.0.0.1"; serverPort = 8080;
             socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             socket.Connect(serverHost, serverPort);
-            
             sslStream = new SslStream(new NetworkStream(socket));
         }
 
@@ -28,28 +29,15 @@ namespace StreamingWithBackpressure.Connections
         {
             sslStream.AuthenticateAsClient(serverHost);
             Debug.Assert(sslStream.IsAuthenticated);
-
-
             await UpgradeToSocketSslStream();
-
-            string message = @"
-            {
-              ""type"": ""subscribe"",
-              ""channels"": [{ ""name"": ""status""}]
-            }";
+            string message = RequestExample.StatusChannelRequest;
             await SendThroughSslStream(message);
             await ReceiveThroughSslStream();
         }
 
         private async Task UpgradeToSocketSslStream()
         {
-            string message = $"GET / HTTP/1.1\r\n" +
-                 $"Host: {serverHost}\r\n" +
-                 $"Upgrade: websocket\r\n" +
-                 $"Connection: Upgrade\r\n" +
-                 $"Sec-WebSocket-Key: AQIDBAUGBwgJCgsMDQ4PEC==\r\n" +
-                 $"Sec-WebSocket-Version: 13\r\n\r\n";
-
+            string message = RequestExample.UpgradeToWebsocket(serverHost);
             byte[] messageBytes = Encoding.UTF8.GetBytes(message);
             sslStream.Write(messageBytes);
             await sslStream.FlushAsync();
@@ -58,13 +46,7 @@ namespace StreamingWithBackpressure.Connections
 
         private async Task UpgradeToSocket()
         {
-            string message = $"GET / HTTP/1.1\r\n" +
-                 $"Host: {serverHost}\r\n" +
-                 $"Upgrade: websocket\r\n" +
-                 $"Connection: Upgrade\r\n" +
-                 $"Sec-WebSocket-Key: AQIDBAUGBwgJCgsMDQ4PEC==\r\n" +
-                 $"Sec-WebSocket-Version: 13\r\n\r\n";
-
+            string message = RequestExample.UpgradeToWebsocket(serverHost);
             byte[] messageBytes = Encoding.UTF8.GetBytes(message);
             await socket.SendAsync(messageBytes);
             await ReceiveThroughSocket(); 
@@ -75,23 +57,20 @@ namespace StreamingWithBackpressure.Connections
 
             await UpgradeToSocket();
 
-            var message = @"
-            {
-              ""type"": ""subscribe"",
-              ""channels"": [{ ""name"": ""status""}]
-            }";
+            var message = RequestExample.StatusChannelRequest;
             await SendThroughSocket(message);
             await ReceiveThroughSocket();
         }
 
         private async Task SendThroughSslStream(string message)
         {
-            SocketPayload payload = new SocketPayload();
+            SocketPayload payload = new();
             payload.SetFinBit(true);
-            payload.SetOpcode((byte)Opcode.BinaryFrame);
+            payload.SetOpcode(Opcode.TextFrame);
             payload.SetApplicationData(message);
             byte[] messageBytes = payload.GetMessageBytes();
-            sslStream.Write(messageBytes);
+
+            await sslStream.WriteAsync(messageBytes, 0, messageBytes.Length);
             await sslStream.FlushAsync();
         }
 
@@ -100,7 +79,7 @@ namespace StreamingWithBackpressure.Connections
             byte[] buffer = new byte[4000];
             int bytesRead = await sslStream.ReadAsync(buffer, CancellationToken.None);
             string receivedMessage = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-            Console.WriteLine("Received ssl: " + receivedMessage);
+            Console.WriteLine("Received SslStream: " + receivedMessage);
             return receivedMessage;
         }
 
@@ -110,7 +89,7 @@ namespace StreamingWithBackpressure.Connections
             {
                 SocketPayload payload = new SocketPayload();
                 payload.SetFinBit(true);
-                payload.SetOpcode((byte)Opcode.BinaryFrame);
+                payload.SetOpcode(Opcode.BinaryFrame);
                 payload.SetApplicationData(message);
                 byte[] messageBytes = payload.GetMessageBytes();
 
@@ -123,7 +102,7 @@ namespace StreamingWithBackpressure.Connections
             byte[] responseBytes = new byte[500];
             await socket.ReceiveAsync(responseBytes);
             var responseMessage = Encoding.UTF8.GetString(responseBytes);
-            Console.WriteLine("Received sock: " + responseMessage);
+            Console.WriteLine("Received socket: " + responseMessage);
             return responseMessage;
         }
     }

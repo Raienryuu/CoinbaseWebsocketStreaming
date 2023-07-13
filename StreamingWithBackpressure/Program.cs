@@ -58,7 +58,7 @@ namespace StreamingWithBackpressure
             //statusConnection.TryStartConnectionAsync();
 
             SocketConnection socketConnection = new();
-            await socketConnection.StartConnectionSocket();
+            await socketConnection.StartConnectionSslStream();
 
             Console.ReadKey();
         }
