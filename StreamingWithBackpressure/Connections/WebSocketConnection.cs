@@ -1,6 +1,5 @@
 ﻿using Newtonsoft.Json;
 using System.Diagnostics;
-using System.Linq.Expressions;
 using System.Net.WebSockets;
 using System.Text;
 
@@ -29,7 +28,7 @@ namespace StreamingWithBackpressure.Connections
 
         async public Task TryStartConnectionAsync()
         {
-            
+
             try
             {
                 await streamSocket.ConnectAsync(coinbaseFeed, CancellationToken.None);
@@ -51,20 +50,20 @@ namespace StreamingWithBackpressure.Connections
             if (streamSocket.State == WebSocketState.Aborted)
             {
                 streamSocket = new ClientWebSocket();
-            }          
+            }
 
             if (streamSocket.State == WebSocketState.Open)
             {
                 Console.WriteLine("Connection has been restored.");
             }
-            else if (streamSocket.State == WebSocketState.Aborted || streamSocket.State == WebSocketState.None)
+            else if (streamSocket.State == WebSocketState.Aborted 
+                || streamSocket.State == WebSocketState.None)
             {
                 Console.WriteLine("Unable to restore WebSocket connection.");
             }
             else
             {
-                Console.WriteLine(streamSocket.State.ToString());
-                throw new WebSocketException();
+                throw new WebSocketException(streamSocket.State.ToString());
             }
         }
         public void SetBufferSize(int bytes)
@@ -75,9 +74,10 @@ namespace StreamingWithBackpressure.Connections
 
         async private Task ReceiveRequestConfirmation()
         {
-            try { 
-            await streamSocket.ReceiveAsync(segment,
-                CancellationToken.None);
+            try
+            {
+                await streamSocket.ReceiveAsync(segment,
+                    CancellationToken.None);
             }
             catch (WebSocketException)
             {
@@ -123,7 +123,7 @@ namespace StreamingWithBackpressure.Connections
                 model = JsonConvert.DeserializeObject<T>(responseJson)!;
                 Debug.Assert(model is not null);
                 return model;
-                
+
             }
             catch (WebSocketException)
             {
@@ -137,5 +137,5 @@ namespace StreamingWithBackpressure.Connections
             segment = new(buffer);
         }
     }
-    
+
 }

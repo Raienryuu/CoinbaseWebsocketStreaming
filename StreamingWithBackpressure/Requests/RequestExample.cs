@@ -1,4 +1,4 @@
-﻿namespace StreamingWithBackpressure.NewFolder
+﻿namespace StreamingWithBackpressure.Requests
 {
     internal static class RequestExample
     {
@@ -17,6 +17,13 @@
             {
               ""type"": ""subscribe"",
               ""channels"": [{ ""name"": ""status""}]
+            }";
+
+        public static string Level2ChannelRequest =@"
+            {
+               ""type"":""subscribe"",
+               ""product_ids"":[ ""BTC-USD""],
+               ""channels"":[""level2_batch""]
             }";
     }
 }

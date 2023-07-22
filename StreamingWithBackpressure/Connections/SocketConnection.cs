@@ -1,6 +1,5 @@
 ﻿using StreamingWithBackpressure.Connections.DataModels;
-using StreamingWithBackpressure.NewFolder;
-using System;
+using StreamingWithBackpressure.Requests;
 using System.Diagnostics;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -10,10 +9,11 @@ namespace StreamingWithBackpressure.Connections
 {
     internal class SocketConnection
     {
-        private Socket socket;
+        private readonly Socket socket;
         private SslStream sslStream;
         private string serverHost;
         private int serverPort;
+        private int bufferSize = 4096;
 
         public SocketConnection(string serverHost, int serverPort)
         {
@@ -49,7 +49,7 @@ namespace StreamingWithBackpressure.Connections
             string message = RequestExample.UpgradeToWebsocket(serverHost);
             byte[] messageBytes = Encoding.UTF8.GetBytes(message);
             await socket.SendAsync(messageBytes);
-            await ReceiveThroughSocket(); 
+            await ReceiveThroughSocket();
         }
 
         public async Task StartConnectionSocket()
@@ -64,11 +64,15 @@ namespace StreamingWithBackpressure.Connections
 
         private async Task SendThroughSslStream(string message)
         {
-            SocketPayload payload = new();
-            payload.SetFinBit(true);
-            payload.SetOpcode(Opcode.TextFrame);
+            WebSocketPayload payload = new()
+            {
+                FinBit = true,
+                Opcode = Opcode.TextFrame
+            };
             payload.SetApplicationData(message);
             byte[] messageBytes = payload.GetMessageBytes();
+
+            var p = new WebSocketPayload(messageBytes);
 
             await sslStream.WriteAsync(messageBytes, 0, messageBytes.Length);
             await sslStream.FlushAsync();
@@ -76,7 +80,9 @@ namespace StreamingWithBackpressure.Connections
 
         private async Task<string> ReceiveThroughSslStream()
         {
-            byte[] buffer = new byte[4000];
+            byte[] buffer = new byte[bufferSize];
+            await sslStream.ReadExactlyAsync(buffer, 0, 2);
+            // TODO: 
             int bytesRead = await sslStream.ReadAsync(buffer, CancellationToken.None);
             string receivedMessage = Encoding.UTF8.GetString(buffer, 0, bytesRead);
             Console.WriteLine("Received SslStream: " + receivedMessage);
@@ -85,11 +91,13 @@ namespace StreamingWithBackpressure.Connections
 
         private async Task SendThroughSocket(string message)
         {
-            if(socket.Connected)
+            if (socket.Connected)
             {
-                SocketPayload payload = new SocketPayload();
-                payload.SetFinBit(true);
-                payload.SetOpcode(Opcode.BinaryFrame);
+                WebSocketPayload payload = new()
+                {
+                    FinBit = true,
+                    Opcode = Opcode.TextFrame
+                };
                 payload.SetApplicationData(message);
                 byte[] messageBytes = payload.GetMessageBytes();
 
@@ -99,7 +107,7 @@ namespace StreamingWithBackpressure.Connections
 
         private async Task<string> ReceiveThroughSocket()
         {
-            byte[] responseBytes = new byte[500];
+            byte[] responseBytes = new byte[bufferSize];
             await socket.ReceiveAsync(responseBytes);
             var responseMessage = Encoding.UTF8.GetString(responseBytes);
             Console.WriteLine("Received socket: " + responseMessage);

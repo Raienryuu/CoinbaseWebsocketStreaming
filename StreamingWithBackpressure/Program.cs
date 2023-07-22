@@ -1,11 +1,6 @@
 using StreamingWithBackpressure.BackpressureSimulation;
 using StreamingWithBackpressure.Connections;
 using StreamingWithBackpressure.Connections.DataModels;
-using System.Net.Security;
-using System.Net.Sockets;
-using System.Net.WebSockets;
-using System.Numerics;
-using System.Text;
 
 namespace StreamingWithBackpressure
 {
@@ -57,7 +52,7 @@ namespace StreamingWithBackpressure
 
             //statusConnection.TryStartConnectionAsync();
 
-            SocketConnection socketConnection = new();
+            SocketConnection socketConnection = new("ws-feed-public.sandbox.exchange.coinbase.com", 443);
             await socketConnection.StartConnectionSslStream();
 
             Console.ReadKey();
