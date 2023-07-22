@@ -42,19 +42,6 @@ namespace StreamingWithBackpressure.Connections.DataModels
             Message = new byte[14];
         }
 
-        public bool GetFinBit()
-        {
-            return FinBit;
-        }
-        public void SetFinBit(bool finBit)
-        {
-            FinBit = finBit;
-        }
-        public void SetOpcode(Opcode opcode)
-        {
-            Opcode = opcode;
-        }
-
         public void SetApplicationData(string applicationData)
         {
             if(applicationData.Length > 0)
